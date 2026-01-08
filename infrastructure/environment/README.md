@@ -1,0 +1,201 @@
+# Terraform Infrastructure Setup Guide
+
+This directory contains Terraform configuration for deploying the Scout AI Proxy Lambda infrastructure.
+
+## Prerequisites
+
+1. **AWS CLI installed and configured**
+   ```bash
+   aws --version
+   # If not installed: brew install awscli (macOS) or follow AWS docs
+   ```
+
+2. **AWS credentials configured**
+   ```bash
+   aws configure
+   # Or set environment variables:
+   # export AWS_ACCESS_KEY_ID=your-key
+   # export AWS_SECRET_ACCESS_KEY=your-secret
+   # export AWS_DEFAULT_REGION=ap-southeast-2
+   ```
+
+3. **Terraform installed** (version >= 1.0)
+   ```bash
+   terraform version
+   # If not installed: brew install terraform (macOS) or download from hashicorp.com
+   ```
+
+4. **S3 bucket exists** (for Lambda code)
+   - Bucket: `pulse-lambda-code-968244163040-ap-southeast-2`
+   - Region: `ap-southeast-2`
+   - If it doesn't exist, create it:
+     ```bash
+     aws s3 mb s3://pulse-lambda-code-968244163040-ap-southeast-2 --region ap-southeast-2
+     ```
+
+## Step-by-Step Setup
+
+### Step 1: Navigate to Infrastructure Directory
+
+```bash
+cd infrastructure/environment
+```
+
+### Step 2: Create terraform.tfvars File
+
+Copy the example file and fill in your values:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` with your actual values:
+
+```hcl
+environment = "dev"
+
+openai_api_key    = "sk-..."
+auth0_domain      = "your-domain.auth0.com"
+auth0_audience     = "https://your-api"
+assemblyai_api_key = "your-assemblyai-key"
+```
+
+**Note:** The `scout_ai_proxy_s3_key` can be left empty for now. Terraform will use the default key name. You'll upload the code later via Makefile/GitHub Actions.
+
+### Step 3: Initialize Terraform
+
+```bash
+terraform init
+```
+
+This downloads the AWS provider and sets up Terraform.
+
+### Step 4: Review the Plan
+
+```bash
+terraform plan
+```
+
+This shows what Terraform will create:
+- IAM role: `scout-lambda-exec-role-dev`
+- IAM policy: `scout-lambda-logging-policy-dev`
+- CloudWatch log group: `/aws/lambda/scout-ai-proxy-dev`
+- Lambda function: `scout-ai-proxy-dev`
+- Lambda Function URL (public HTTP endpoint)
+
+**Important:** Make sure the plan looks correct before applying!
+
+### Step 5: Apply Infrastructure
+
+```bash
+terraform apply
+```
+
+Terraform will prompt you to confirm. Type `yes` to proceed.
+
+This will create all the infrastructure resources. It may take 1-2 minutes.
+
+### Step 6: Get the Function URL
+
+After apply completes, get the Function URL:
+
+```bash
+terraform output lambda_function_url
+```
+
+Or view all outputs:
+
+```bash
+terraform output
+```
+
+You should see:
+- `lambda_function_arn` - ARN of the Lambda
+- `lambda_function_url` - Public HTTP endpoint
+- `lambda_function_name` - Name of the function
+
+## What Gets Created
+
+1. **IAM Role** (`scout-lambda-exec-role-dev`)
+   - Allows Lambda to assume the role
+   - Has CloudWatch logging permissions
+
+2. **CloudWatch Log Group** (`/aws/lambda/scout-ai-proxy-dev`)
+   - Stores Lambda execution logs
+   - 14-day retention
+
+3. **Lambda Function** (`scout-ai-proxy-dev`)
+   - Runtime: Node.js 20.x
+   - Handler: `index.handler`
+   - Timeout: 120 seconds
+   - Environment variables: OPENAI_API_KEY, AUTH0_DOMAIN, AUTH0_AUDIENCE, ASSEMBLYAI_API_KEY
+   - **Note:** Function code will be empty initially (just the skeleton)
+
+4. **Lambda Function URL**
+   - Public HTTP endpoint
+   - CORS enabled
+   - Response streaming enabled
+
+## Next Steps
+
+After infrastructure is created:
+
+1. **Upload Lambda code** (choose one):
+   - **Option A:** Use Makefile locally:
+     ```bash
+     cd ../../services/ai-proxy
+     make deploy-dev
+     ```
+   
+   - **Option B:** Push to GitHub (triggers auto-deploy via GitHub Actions)
+
+2. **Test the Function URL:**
+   ```bash
+   curl $(terraform output -raw lambda_function_url)/test
+   ```
+
+## Troubleshooting
+
+### Error: "Bucket does not exist"
+- Create the S3 bucket first:
+  ```bash
+  aws s3 mb s3://pulse-lambda-code-968244163040-ap-southeast-2 --region ap-southeast-2
+  ```
+
+### Error: "Access Denied"
+- Check your AWS credentials:
+  ```bash
+  aws sts get-caller-identity
+  ```
+- Ensure your IAM user/role has permissions for:
+  - Lambda (create function, create function URL)
+  - IAM (create role, create policy)
+  - CloudWatch (create log group)
+  - S3 (read from bucket)
+
+### Error: "Resource already exists"
+- If you're re-running, you may need to import existing resources or destroy first:
+  ```bash
+  terraform destroy  # ⚠️ Destroys all resources
+  ```
+
+## Destroying Infrastructure
+
+To remove all resources:
+
+```bash
+terraform destroy
+```
+
+**Warning:** This will delete the Lambda function, IAM role, log group, and Function URL. Make sure you want to do this!
+
+## Environment Variables
+
+The Lambda function will have these environment variables set:
+- `OPENAI_API_KEY` - From terraform.tfvars
+- `AUTH0_DOMAIN` - From terraform.tfvars
+- `AUTH0_AUDIENCE` - From terraform.tfvars
+- `ASSEMBLYAI_API_KEY` - From terraform.tfvars
+
+These are set during `terraform apply` and won't change unless you run Terraform again.
+
