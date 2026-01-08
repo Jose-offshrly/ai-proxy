@@ -176,6 +176,25 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STAGING TEST ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/staging-test') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Staging release test endpoint',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+      environment: 'staging',
+      version: '1.0.0',
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
