@@ -1,5 +1,5 @@
 # Define variables
-BUCKET_NAME := pulse-lambda-code-968244163040-ap-southeast-2
+BUCKET_NAME := zunou
 ZIP_FILE := scout_ai_proxy_lambda_function.zip
 
 # Define function names per environment
@@ -19,7 +19,11 @@ ifeq ($(ENV),prod)
     FUNCTION_NAME := $(FUNCTION_PROD)
 endif
 
-# Deploy the Lambda function
+# Build and upload to S3 only (for CI/CD or initial setup)
+build-and-upload: zip upload
+	@echo "✅ Build and upload to S3 complete!"
+
+# Deploy the Lambda function (updates existing Lambda)
 deploy-dev:
 	@$(MAKE) deploy ENV=dev
 

@@ -8,7 +8,7 @@ resource "aws_lambda_function" "scout_ai_proxy" {
   # Reference the S3 bucket and key where your zip is located
   # Note: Bucket must be in the same region as Lambda (ap-southeast-2)
   # Code updates are handled via Makefile/CLI, not Terraform
-  s3_bucket = "pulse-lambda-code-968244163040-ap-southeast-2"
+  s3_bucket = "zunou"
   s3_key    = var.scout_ai_proxy_s3_key
 
   environment {

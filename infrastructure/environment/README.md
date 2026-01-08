@@ -26,11 +26,11 @@ This directory contains Terraform configuration for deploying the Scout AI Proxy
    ```
 
 4. **S3 bucket exists** (for Lambda code)
-   - Bucket: `pulse-lambda-code-968244163040-ap-southeast-2`
+   - Bucket: `zunou`
    - Region: `ap-southeast-2`
    - If it doesn't exist, create it:
      ```bash
-     aws s3 mb s3://pulse-lambda-code-968244163040-ap-southeast-2 --region ap-southeast-2
+     aws s3 mb s3://zunou --region ap-southeast-2
      ```
 
 ## Step-by-Step Setup
@@ -41,11 +41,28 @@ This directory contains Terraform configuration for deploying the Scout AI Proxy
 cd infrastructure/environment
 ```
 
-### Step 2: Create terraform.tfvars File
+### Step 2: Build and Upload Lambda Code (First Time Only)
+
+Before running Terraform, you need to build and upload the Lambda code to S3:
+
+```bash
+cd ../../services/ai-proxy
+make deploy-dev
+```
+
+This will:
+- Install dependencies
+- Create the zip file
+- Upload to S3 bucket `zunou`
+
+**Note:** This is a one-time step for initial setup. After infrastructure is created, GitHub Actions will handle all future code deployments automatically.
+
+### Step 3: Create terraform.tfvars File
 
 Copy the example file and fill in your values:
 
 ```bash
+cd ../../infrastructure/environment
 cp terraform.tfvars.example terraform.tfvars
 ```
 
@@ -60,9 +77,9 @@ auth0_audience     = "https://your-api"
 assemblyai_api_key = "your-assemblyai-key"
 ```
 
-**Note:** The `scout_ai_proxy_s3_key` can be left empty for now. Terraform will use the default key name. You'll upload the code later via Makefile/GitHub Actions.
+**Note:** The `scout_ai_proxy_s3_key` can be left empty. Terraform will use the default key name (`scout_ai_proxy_lambda_function.zip`).
 
-### Step 3: Initialize Terraform
+### Step 4: Initialize Terraform
 
 ```bash
 terraform init
@@ -70,7 +87,7 @@ terraform init
 
 This downloads the AWS provider and sets up Terraform.
 
-### Step 4: Review the Plan
+### Step 5: Review the Plan
 
 ```bash
 terraform plan
@@ -85,7 +102,7 @@ This shows what Terraform will create:
 
 **Important:** Make sure the plan looks correct before applying!
 
-### Step 5: Apply Infrastructure
+### Step 6: Apply Infrastructure
 
 ```bash
 terraform apply
@@ -95,7 +112,7 @@ Terraform will prompt you to confirm. Type `yes` to proceed.
 
 This will create all the infrastructure resources. It may take 1-2 minutes.
 
-### Step 6: Get the Function URL
+### Step 7: Get the Function URL
 
 After apply completes, get the Function URL:
 
@@ -140,26 +157,22 @@ You should see:
 
 After infrastructure is created:
 
-1. **Upload Lambda code** (choose one):
-   - **Option A:** Use Makefile locally:
-     ```bash
-     cd ../../services/ai-proxy
-     make deploy-dev
-     ```
-   
-   - **Option B:** Push to GitHub (triggers auto-deploy via GitHub Actions)
-
-2. **Test the Function URL:**
+1. **Test the Function URL:**
    ```bash
    curl $(terraform output -raw lambda_function_url)/test
    ```
+
+2. **Future code updates:**
+   - Push changes to `main` branch
+   - GitHub Actions will automatically build and deploy the new code
+   - No need to run Terraform again for code changes
 
 ## Troubleshooting
 
 ### Error: "Bucket does not exist"
 - Create the S3 bucket first:
   ```bash
-  aws s3 mb s3://pulse-lambda-code-968244163040-ap-southeast-2 --region ap-southeast-2
+  aws s3 mb s3://zunou-lambda-code-ap-southeast-2 --region ap-southeast-2
   ```
 
 ### Error: "Access Denied"

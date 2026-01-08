@@ -9,6 +9,27 @@ locals {
 
   # Default S3 key if not provided via variable (matches Makefile ZIP_FILE)
   scout_ai_proxy_s3_key = var.scout_ai_proxy_s3_key != "" ? var.scout_ai_proxy_s3_key : "scout_ai_proxy_lambda_function.zip"
+  
+  # Path to Lambda source code (relative to this Terraform directory)
+  lambda_source_path = "${path.module}/../../services/ai-proxy"
+}
+
+# Automatically build and upload Lambda code to S3 before creating Lambda function
+resource "null_resource" "build_and_upload_lambda" {
+  triggers = {
+    # Rebuild when source code changes
+    source_hash = sha256(join("", [
+      for f in fileset(local.lambda_source_path, "*.mjs") : filesha256("${local.lambda_source_path}/${f}")
+    ]))
+    package_json = filesha256("${local.lambda_source_path}/package.json")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cd ${local.lambda_source_path} && \
+      make build-and-upload
+    EOT
+  }
 }
 
 module "iam" {
@@ -38,5 +59,8 @@ module "lambda" {
   auth0_domain      = var.auth0_domain
   auth0_audience     = var.auth0_audience
   assemblyai_api_key = var.assemblyai_api_key
+
+  # Ensure Lambda code is built and uploaded before creating Lambda function
+  depends_on = [null_resource.build_and_upload_lambda]
 }
 
