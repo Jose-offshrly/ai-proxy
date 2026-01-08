@@ -49,6 +49,12 @@ upload: zip
 # Step 3: Update Lambda function
 update: upload
 	@echo "🚀 Updating Lambda function $(FUNCTION_NAME)..."
+	@if ! aws lambda get-function --function-name $(FUNCTION_NAME) > /dev/null 2>&1; then \
+		echo "❌ Error: Lambda function $(FUNCTION_NAME) does not exist!"; \
+		echo "   Please create it first using Terraform:"; \
+		echo "   cd ../../infrastructure/environment && terraform apply -var-file=terraform.staging.tfvars"; \
+		exit 1; \
+	fi
 	aws lambda update-function-code \
 	    --function-name $(FUNCTION_NAME) \
 	    --s3-bucket $(BUCKET_NAME) \

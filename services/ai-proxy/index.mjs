@@ -224,6 +224,23 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INFONEW ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/infonew') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Info New Endpoint',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
