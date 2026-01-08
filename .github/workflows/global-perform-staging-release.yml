@@ -46,3 +46,4 @@ jobs:
       - name: Deploy Lambda (staging)
         working-directory: services/ai-proxy
         run: make deploy-stg
+        continue-on-error: true
