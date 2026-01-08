@@ -176,6 +176,54 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STAGING TEST ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/staging-test') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Staging release test endpoint',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+      environment: 'staging',
+      version: '1.0.0',
+    }));
+    responseStream.end();
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INFO ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/info') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      service: 'scout-ai-proxy',
+      status: 'operational',
+      timestamp: new Date().toISOString(),
+      runtime: process.version,
+      region: process.env.AWS_REGION || 'unknown',
+      functionName: process.env.AWS_LAMBDA_FUNCTION_NAME || 'unknown',
+      environment: {
+        hasOpenAI: !!process.env.OPENAI_API_KEY,
+        hasAuth0: !!(process.env.AUTH0_DOMAIN && process.env.AUTH0_AUDIENCE),
+        hasAssemblyAI: !!process.env.ASSEMBLYAI_API_KEY,
+      },
+      request: {
+        path: path,
+        method: event.requestContext?.http?.method || 'GET',
+        requestId: event.requestContext?.requestId || 'unknown',
+      },
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
