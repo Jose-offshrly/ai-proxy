@@ -1,0 +1,19 @@
+# Terraform Variables for DEV Environment
+# Copy this file to terraform.dev.tfvars and fill in your values
+# This file is ignored by git.
+
+environment = "dev"
+
+# AWS Region (optional, defaults to ap-southeast-2)
+# aws_region = "ap-southeast-2"
+
+# S3 key for Lambda code (optional, defaults to scout_ai_proxy_lambda_function.zip)
+# Leave empty to use default, or specify if you've already uploaded a zip
+# scout_ai_proxy_s3_key = ""
+
+# Lambda Environment Variables
+# These will be set on the Lambda function
+openai_api_key    = "your-openai-api-key-here"
+auth0_domain      = "your-auth0-domain.auth0.com"
+auth0_audience     = "your-auth0-audience"
+assemblyai_api_key = "your-assemblyai-api-key-here"

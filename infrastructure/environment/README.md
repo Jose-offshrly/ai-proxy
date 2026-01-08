@@ -33,6 +33,42 @@ This directory contains Terraform configuration for deploying the Scout AI Proxy
      aws s3 mb s3://zunou --region ap-southeast-2
      ```
 
+## Environment-Specific Configuration
+
+This project uses environment-specific tfvars files:
+- `terraform.dev.tfvars` - For DEV environment
+- `terraform.staging.tfvars` - For STAGING environment
+
+Each environment has its own Lambda function, IAM role, and CloudWatch log group.
+
+**Note:** If you have an existing `terraform.tfvars` file, you can migrate it to `terraform.dev.tfvars` for consistency.
+
+### Quick Reference: Commands by Environment
+
+**DEV Environment:**
+```bash
+# Plan
+terraform plan -var-file=terraform.dev.tfvars
+
+# Apply
+terraform apply -var-file=terraform.dev.tfvars
+
+# Destroy
+terraform destroy -var-file=terraform.dev.tfvars
+```
+
+**STAGING Environment:**
+```bash
+# Plan
+terraform plan -var-file=terraform.staging.tfvars
+
+# Apply
+terraform apply -var-file=terraform.staging.tfvars
+
+# Destroy
+terraform destroy -var-file=terraform.staging.tfvars
+```
+
 ## Step-by-Step Setup
 
 ### Step 1: Navigate to Infrastructure Directory
@@ -57,19 +93,25 @@ This will:
 
 **Note:** This is a one-time step for initial setup. After infrastructure is created, GitHub Actions will handle all future code deployments automatically.
 
-### Step 3: Create terraform.tfvars File
+### Step 3: Create Environment-Specific tfvars Files
 
-Copy the example file and fill in your values:
+Copy the example file for your environment and fill in your values:
 
+**For DEV environment:**
 ```bash
 cd ../../infrastructure/environment
-cp terraform.tfvars.example terraform.tfvars
+cp terraform.dev.tfvars.example terraform.dev.tfvars
 ```
 
-Edit `terraform.tfvars` with your actual values:
+**For STAGING environment:**
+```bash
+cp terraform.staging.tfvars.example terraform.staging.tfvars
+```
+
+Edit the tfvars file with your actual values:
 
 ```hcl
-environment = "dev"
+environment = "dev"  # or "staging"
 
 openai_api_key    = "sk-..."
 auth0_domain      = "your-domain.auth0.com"
@@ -89,23 +131,35 @@ This downloads the AWS provider and sets up Terraform.
 
 ### Step 5: Review the Plan
 
+**For DEV environment:**
 ```bash
-terraform plan
+terraform plan -var-file=terraform.dev.tfvars
+```
+
+**For STAGING environment:**
+```bash
+terraform plan -var-file=terraform.staging.tfvars
 ```
 
 This shows what Terraform will create:
-- IAM role: `scout-lambda-exec-role-dev`
-- IAM policy: `scout-lambda-logging-policy-dev`
-- CloudWatch log group: `/aws/lambda/scout-ai-proxy-dev`
-- Lambda function: `scout-ai-proxy-dev`
+- IAM role: `scout-lambda-exec-role-{environment}`
+- IAM policy: `scout-lambda-logging-policy-{environment}`
+- CloudWatch log group: `/aws/lambda/scout-ai-proxy-{environment}`
+- Lambda function: `scout-ai-proxy-{environment}`
 - Lambda Function URL (public HTTP endpoint)
 
 **Important:** Make sure the plan looks correct before applying!
 
 ### Step 6: Apply Infrastructure
 
+**For DEV environment:**
 ```bash
-terraform apply
+terraform apply -var-file=terraform.dev.tfvars
+```
+
+**For STAGING environment:**
+```bash
+terraform apply -var-file=terraform.staging.tfvars
 ```
 
 Terraform will prompt you to confirm. Type `yes` to proceed.
@@ -196,8 +250,14 @@ After infrastructure is created:
 
 To remove all resources:
 
+**For DEV environment:**
 ```bash
-terraform destroy
+terraform destroy -var-file=terraform.dev.tfvars
+```
+
+**For STAGING environment:**
+```bash
+terraform destroy -var-file=terraform.staging.tfvars
 ```
 
 **Warning:** This will delete the Lambda function, IAM role, log group, and Function URL. Make sure you want to do this!
