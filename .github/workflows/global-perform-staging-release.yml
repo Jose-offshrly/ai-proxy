@@ -43,6 +43,8 @@ jobs:
         working-directory: services/ai-proxy
         run: npm install --omit=dev
 
+      # Continue on error to prevent blocking other services in the same release.
+      # If Lambda doesn't exist yet (first deployment), make deploy-stg will gracefully skip the update step.
       - name: Deploy Lambda (staging)
         working-directory: services/ai-proxy
         run: make deploy-stg
