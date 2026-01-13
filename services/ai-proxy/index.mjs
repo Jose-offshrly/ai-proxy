@@ -161,6 +161,21 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
   // ═══════════════════════════════════════════════════════════════════════════
   // TEST ENDPOINT - No authentication required (for testing only)
   // ═══════════════════════════════════════════════════════════════════════════
+  // Ping/Pong endpoint for testing
+  if (path === '/ping') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'pong',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+    }));
+    responseStream.end();
+    return;
+  }
+
   // Hello World endpoint for testing
   if (path === '/hello') {
     metadata.statusCode = 200;
