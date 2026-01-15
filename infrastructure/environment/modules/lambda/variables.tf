@@ -8,17 +8,6 @@ variable "lambda_execution_role_arn" {
   type        = string
 }
 
-variable "scout_ai_proxy_s3_key" {
-  description = "S3 key for the Lambda deployment package"
-  type        = string
-  default     = "scout_ai_proxy_lambda_function.zip"
-}
-
-variable "scout_ai_proxy_log_group_arn" {
-  description = "ARN of the CloudWatch log group"
-  type        = string
-}
-
 variable "openai_api_key" {
   description = "OpenAI API key"
   type        = string

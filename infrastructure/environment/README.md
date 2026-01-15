@@ -4,8 +4,8 @@ This directory contains Terraform configuration for deploying the Scout AI Proxy
 
 ## Overview
 
-- **Terraform**: Manages infrastructure (IAM roles, CloudWatch logs, Lambda function definition)
-- **Makefile/GitHub Actions**: Handles code deployment (build, upload to S3, update Lambda)
+- **Terraform**: Manages infrastructure (IAM roles, CloudWatch logs, Lambda function, ECR repository, Docker image build)
+- **Makefile/GitHub Actions**: Handles code deployment (build Docker image, push to ECR, update Lambda)
 
 ## Prerequisites
 
@@ -24,32 +24,14 @@ This directory contains Terraform configuration for deploying the Scout AI Proxy
    terraform version
    ```
 
-4. **S3 bucket exists** (for Lambda code)
-   - Bucket: `zunou`
-   - Region: `ap-southeast-2`
-   - If it doesn't exist, create it:
-     ```bash
-     aws s3 mb s3://zunou --region ap-southeast-2
-     ```
+4. **Docker installed** (for building container images)
+   ```bash
+   docker --version
+   ```
 
 ## Initial Setup
 
-### 1. Build and Upload Code
-
-Before running Terraform, build and upload the Lambda code to S3:
-
-```bash
-cd ../../services/ai-proxy
-make deploy-stg  # or deploy-dev, deploy-prod
-```
-
-This will:
-- Install dependencies
-- Create zip file
-- Upload to S3 bucket `zunou`
-- Skip Lambda update gracefully if function doesn't exist yet
-
-### 2. Configure Terraform
+### 1. Configure Terraform
 
 Create environment-specific tfvars file:
 
@@ -66,7 +48,7 @@ cp terraform.staging.tfvars.example terraform.staging.tfvars
 Edit the tfvars file:
 
 ```hcl
-environment = "dev"  # or "staging"
+environment = "staging"  # or "dev"
 
 openai_api_key    = "sk-..."
 auth0_domain      = "your-domain.auth0.com"
@@ -74,9 +56,7 @@ auth0_audience     = "https://your-api"
 assemblyai_api_key = "your-assemblyai-key"
 ```
 
-**Note:** The `scout_ai_proxy_s3_key` can be left empty. Terraform will use the default key name (`scout_ai_proxy_lambda_function.zip`).
-
-### 3. Deploy Infrastructure
+### 2. Deploy Infrastructure
 
 ```bash
 terraform init
@@ -85,13 +65,15 @@ terraform apply -var-file=terraform.staging.tfvars
 ```
 
 This creates:
-- IAM role: `scout-lambda-exec-role-{environment}`
-- IAM policy: `scout-lambda-logging-policy-{environment}`
-- CloudWatch log group: `/aws/lambda/scout-ai-proxy-{environment}`
-- Lambda function: `scout-ai-proxy-{environment}` (references the S3 file)
-- Lambda Function URL (public HTTP endpoint)
+- **ECR repository**: `scout-ai-proxy` (created by docker-build module)
+- **Docker image**: Built and pushed to ECR automatically
+- **IAM role**: `scout-lambda-exec-role-{environment}`
+- **IAM policy**: `scout-lambda-logging-policy-{environment}`
+- **CloudWatch log group**: `/aws/lambda/scout-ai-proxy-{environment}` (created by Lambda module)
+- **Lambda function**: `scout-ai-proxy-{environment}` (container image)
+- **Lambda Function URL**: Public HTTP endpoint
 
-### 4. Get Function URL
+### 3. Get Function URL
 
 ```bash
 terraform output lambda_function_url
@@ -99,24 +81,26 @@ terraform output lambda_function_url
 
 ## Code Updates
 
-After initial setup, code updates are automatic:
+After initial setup, code updates can be done via:
 
-- **GitHub Actions**: When `services/ai-proxy/**` changes are pushed to `staging`, the workflow automatically builds, uploads, and updates Lambda
-- **Manual**: Run `make deploy-stg` (or `deploy-dev`/`deploy-prod`)
+- **GitHub Actions**: When `services/ai-proxy/**` changes are pushed to `staging`, the workflow automatically builds Docker image, pushes to ECR, and updates Lambda
+- **Manual**: Run `make deploy-stg` (or `deploy-dev`/`deploy-prod`) in `services/ai-proxy/`
 
-**No Terraform needed** for code updates - only for infrastructure changes.
+**Note:** Terraform's docker-build module will rebuild the image if source files change. For CI/CD deployments, GitHub Actions/Makefile handles the build and push.
 
 ## Troubleshooting
 
-**S3 file not found**
-```bash
-cd ../../services/ai-proxy
-make deploy-stg
-```
+**Docker build fails**
+- Ensure Docker is installed and running
+- Check Dockerfile is correct
 
-**Access Denied**
-- Check AWS credentials have `s3:PutObject` permission on `zunou` bucket
+**ECR push fails**
+- Check AWS credentials have ECR push permissions
+- Verify ECR repository exists (created by Terraform)
+
+**Lambda update fails**
 - Check AWS credentials have `lambda:UpdateFunctionCode` permission
+- Verify Lambda function exists
 
 **Resource already exists**
 - If re-running, you may need to import existing resources or destroy first:
@@ -132,4 +116,4 @@ To remove all resources:
 terraform destroy -var-file=terraform.staging.tfvars
 ```
 
-**Warning:** This will delete the Lambda function, IAM role, log group, and Function URL.
+**Warning:** This will delete the Lambda function, IAM role, log group, Function URL, ECR repository, and all images.

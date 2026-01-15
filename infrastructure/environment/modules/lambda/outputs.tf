@@ -1,11 +1,11 @@
 output "lambda_function_arn" {
   description = "ARN of the Lambda function"
-  value       = aws_lambda_function.scout_ai_proxy.arn
+  value       = module.lambda_function.lambda_function_arn
 }
 
 output "lambda_function_name" {
   description = "Name of the Lambda function"
-  value       = aws_lambda_function.scout_ai_proxy.function_name
+  value       = module.lambda_function.lambda_function_name
 }
 
 output "lambda_function_url" {
@@ -13,3 +13,7 @@ output "lambda_function_url" {
   value       = aws_lambda_function_url.scout_ai_proxy.function_url
 }
 
+output "ecr_repository_url" {
+  description = "ECR repository URL for scout-ai-proxy"
+  value       = module.docker_image.image_uri
+}

@@ -34,6 +34,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.TF_AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set environment variables
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "ECR_REPO=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/scout-ai-proxy" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          echo "FUNCTION_NAME=scout-ai-proxy-staging" >> $GITHUB_ENV
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,9 +56,22 @@ jobs:
         working-directory: services/ai-proxy
         run: npm install --omit=dev
 
-      # Continue on error to prevent blocking other services in the same release.
-      # If Lambda doesn't exist yet (first deployment), make deploy-stg will gracefully skip the update step.
-      - name: Deploy Lambda (staging)
+      - name: Build Docker image
         working-directory: services/ai-proxy
-        run: make deploy-stg
-        continue-on-error: true
+        run: |
+          docker build --platform linux/amd64 --provenance=false -t $ECR_REPO:$IMAGE_TAG .
+
+      - name: Push Docker image
+        run: |
+          docker push $ECR_REPO:$IMAGE_TAG
+          # Also tag as staging-latest for easy reference
+          docker tag $ECR_REPO:$IMAGE_TAG $ECR_REPO:staging-latest
+          docker push $ECR_REPO:staging-latest
+
+      - name: Update Lambda function code
+        run: |
+          echo "✅ Updating Lambda function code to image $ECR_REPO:$IMAGE_TAG..."
+          aws lambda update-function-code \
+            --function-name $FUNCTION_NAME \
+            --image-uri $ECR_REPO:$IMAGE_TAG
+          echo "✅ Lambda function updated successfully!"
