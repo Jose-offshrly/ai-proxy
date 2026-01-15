@@ -276,6 +276,45 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     responseStream.end();
     return;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC TEST ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/public-test') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Public test endpoint is working!',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+      requestId: event.requestContext?.requestId || 'unknown',
+      service: 'scout-ai-proxy',
+      version: '1.0.0',
+      runtime: process.version,
+      region: process.env.AWS_REGION || 'unknown',
+      functionName: process.env.AWS_LAMBDA_FUNCTION_NAME || 'unknown',
+      environment: {
+        hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+        hasAuth0Domain: !!process.env.AUTH0_DOMAIN,
+        hasAuth0Audience: !!process.env.AUTH0_AUDIENCE,
+        hasAssemblyAIKey: !!process.env.ASSEMBLYAI_API_KEY,
+      },
+      availableEndpoints: [
+        '/ping',
+        '/hello',
+        '/staging-test',
+        '/info',
+        '/infonew',
+        '/test',
+        '/health',
+        '/public-test',
+      ],
+    }));
+    responseStream.end();
+    return;
+  }
   
   // ═══════════════════════════════════════════════════════════════════════════
   // JWT VALIDATION - All endpoints require valid Auth0 token
