@@ -301,6 +301,29 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STATUS ENDPOINT - No authentication required (for testing only)
+  // Returns deployment status and version info
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/status') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      status: 'operational',
+      service: 'scout-ai-proxy',
+      timestamp: new Date().toISOString(),
+      version: '2.0.0',
+      deployment: 'staging',
+      endpoints: {
+        public: ['/ping', '/hello', '/public-test', '/public-echo', '/status'],
+        authenticated: ['/responses', '/realtime', '/conversations'],
+      },
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
