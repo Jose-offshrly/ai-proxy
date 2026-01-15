@@ -14,12 +14,6 @@ variable "aws_region" {
   default     = "ap-southeast-2"
 }
 
-variable "scout_ai_proxy_s3_key" {
-  description = "S3 key for the scout-ai-proxy Lambda deployment package. If empty, uses default key."
-  type        = string
-  default     = ""
-}
-
 variable "openai_api_key" {
   description = "OpenAI API key for scout-ai-proxy Lambda"
   type        = string

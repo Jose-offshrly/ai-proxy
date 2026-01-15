@@ -34,18 +34,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.TF_AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        working-directory: services/ai-proxy
-        run: npm install --omit=dev
-
       # Continue on error to prevent blocking other services in the same release.
       # If Lambda doesn't exist yet (first deployment), make deploy-stg will gracefully skip the update step.
+      # The Makefile handles: npm install, docker build, docker push, and lambda update
       - name: Deploy Lambda (staging)
         working-directory: services/ai-proxy
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: make deploy-stg
         continue-on-error: true

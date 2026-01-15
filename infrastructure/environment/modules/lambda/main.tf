@@ -1,71 +1,48 @@
-# Create bootstrap Lambda zip using native Terraform archive provider
-# This ensures the S3 file always exists before Lambda creation (first apply only)
-# The archive provider is built into Terraform (no external dependencies)
-data "archive_file" "bootstrap_lambda" {
-  type        = "zip"
-  output_path = "${path.module}/build/bootstrap-${var.environment}.zip"
+# Build Docker image and push to ECR
+# ECR repository is created automatically by docker-build module
+module "docker_image" {
+  source = "terraform-aws-modules/lambda/aws//modules/docker-build"
 
-  source {
-    filename = "index.mjs"
-    content  = <<EOF
-export const handler = async () => ({
-  statusCode: 200,
-  body: JSON.stringify({ message: "bootstrap - replaced by CI" })
-});
-EOF
-  }
+  create_ecr_repo = true
+  ecr_repo        = "scout-ai-proxy"
 
-  source {
-    filename = "package.json"
-    content  = <<EOF
-{
-  "type": "module",
-  "name": "scout-ai-proxy-bootstrap",
-  "version": "1.0.0"
-}
-EOF
+  # Use hash-based tags for better change detection
+  use_image_tag = false
+
+  # Path to the service directory containing Dockerfile
+  source_path = "${path.module}/../../../../services/ai-proxy"
+
+  # Rebuild on any source file change
+  triggers = {
+    source_hash = sha256(join("", [
+      for f in fileset("${path.module}/../../../../services/ai-proxy", "**") :
+      filesha256("${path.module}/../../../../services/ai-proxy/${f}")
+    ]))
   }
 }
 
-# Upload bootstrap Lambda to S3
-# Terraform creates it once, then CI can overwrite it
-resource "aws_s3_object" "bootstrap_lambda" {
-  bucket      = "zunou"
-  key         = var.scout_ai_proxy_s3_key
-  source      = data.archive_file.bootstrap_lambda.output_path
-  source_hash  = data.archive_file.bootstrap_lambda.output_base64sha256
+# Scout AI Proxy Lambda Function (container image)
+module "lambda_function" {
+  source = "terraform-aws-modules/lambda/aws"
 
-  # Allow CI to overwrite this file - Terraform won't try to "fix" it
-  lifecycle {
-    ignore_changes = [source_hash, etag]
-  }
-}
+  function_name  = "scout-ai-proxy-${var.environment}"
+  create_package = false
 
-# Scout AI Proxy Lambda Function
-resource "aws_lambda_function" "scout_ai_proxy" {
-  function_name = "scout-ai-proxy-${var.environment}"
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
-  role          = var.lambda_execution_role_arn
+  image_uri    = module.docker_image.image_uri
+  package_type = "Image"
 
-  # Reference the S3 bucket and key where your zip is located
-  # Note: Bucket must be in the same region as Lambda (ap-southeast-2)
-  # Code updates are handled via Makefile/CLI, not Terraform
-  s3_bucket = "zunou"
-  s3_key    = aws_s3_object.bootstrap_lambda.key
+  # Use existing IAM role (don't create a new one)
+  create_role = false
+  lambda_role = var.lambda_execution_role_arn
 
-  # Ignore changes to S3 key so CI deployments can update code
-  lifecycle {
-    ignore_changes = [s3_key]
-  }
+  # CloudWatch log group is created automatically by Lambda module
 
-  environment {
-    variables = {
+  # Environment variables
+  environment_variables = {
       OPENAI_API_KEY     = var.openai_api_key
       AUTH0_DOMAIN       = var.auth0_domain
-      AUTH0_AUDIENCE       = var.auth0_audience
+    AUTH0_AUDIENCE     = var.auth0_audience
       ASSEMBLYAI_API_KEY = var.assemblyai_api_key
-    }
   }
 
   # Timeout for AI responses (can take 30-60+ seconds)
@@ -80,8 +57,8 @@ resource "aws_lambda_function" "scout_ai_proxy" {
 
 # Lambda Function URL for HTTP access
 resource "aws_lambda_function_url" "scout_ai_proxy" {
-  function_name      = aws_lambda_function.scout_ai_proxy.function_name
-  authorization_type = "NONE" # Auth is handled in Lambda code via JWT
+  function_name      = module.lambda_function.lambda_function_name
+  authorization_type = "NONE"            # Auth is handled in Lambda code via JWT
   invoke_mode        = "RESPONSE_STREAM" # Required for awslambda.streamifyResponse() in code
 
   cors {
@@ -90,15 +67,14 @@ resource "aws_lambda_function_url" "scout_ai_proxy" {
     allow_methods     = ["*"]
     allow_headers     = ["*"]
     expose_headers    = ["*"]
-    max_age          = 86400
+    max_age           = 86400
   }
 }
 
 # Resource-based policy to allow public invocation
 resource "aws_lambda_permission" "allow_public_invoke_function" {
   statement_id  = "FunctionURLAllowInvokeAction"
-  action       = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.scout_ai_proxy.function_name
-  principal    = "*"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_function.lambda_function_name
+  principal     = "*"
 }
-
