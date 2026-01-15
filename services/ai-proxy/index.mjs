@@ -274,6 +274,33 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC-ECHO ENDPOINT - No authentication required (for testing only)
+  // Echoes back basic request info and optional JSON body
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/public-echo') {
+    let body = null;
+    try {
+      body = event.body ? JSON.parse(event.body) : null;
+    } catch {
+      body = null;
+    }
+
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Public echo endpoint OK',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+      queryStringParameters: event.queryStringParameters || {},
+      body,
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
