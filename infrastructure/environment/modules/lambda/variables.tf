@@ -11,6 +11,7 @@ variable "lambda_execution_role_arn" {
 variable "scout_ai_proxy_s3_key" {
   description = "S3 key for the Lambda deployment package"
   type        = string
+  default     = "scout_ai_proxy_lambda_function.zip"
 }
 
 variable "scout_ai_proxy_log_group_arn" {

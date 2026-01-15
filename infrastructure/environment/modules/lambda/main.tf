@@ -1,63 +1,15 @@
-# Create bootstrap Lambda zip using native Terraform archive provider
-# This ensures the S3 file always exists before Lambda creation (first apply only)
-# The archive provider is built into Terraform (no external dependencies)
-data "archive_file" "bootstrap_lambda" {
-  type        = "zip"
-  output_path = "${path.module}/build/bootstrap-${var.environment}.zip"
-
-  source {
-    filename = "index.mjs"
-    content  = <<EOF
-export const handler = async () => ({
-  statusCode: 200,
-  body: JSON.stringify({ message: "bootstrap - replaced by CI" })
-});
-EOF
-  }
-
-  source {
-    filename = "package.json"
-    content  = <<EOF
-{
-  "type": "module",
-  "name": "scout-ai-proxy-bootstrap",
-  "version": "1.0.0"
-}
-EOF
-  }
-}
-
-# Upload bootstrap Lambda to S3
-# Terraform creates it once, then CI can overwrite it
-resource "aws_s3_object" "bootstrap_lambda" {
-  bucket      = "zunou"
-  key         = var.scout_ai_proxy_s3_key
-  source      = data.archive_file.bootstrap_lambda.output_path
-  source_hash  = data.archive_file.bootstrap_lambda.output_base64sha256
-
-  # Allow CI to overwrite this file - Terraform won't try to "fix" it
-  lifecycle {
-    ignore_changes = [source_hash, etag]
-  }
-}
-
-# Scout AI Proxy Lambda Function
+# Scout AI Proxy Lambda Function (S3 ZIP deployment)
+# ZIP file is built and uploaded to S3 by GitHub Actions / Makefile
 resource "aws_lambda_function" "scout_ai_proxy" {
   function_name = "scout-ai-proxy-${var.environment}"
   handler       = "index.handler"
   runtime       = "nodejs20.x"
   role          = var.lambda_execution_role_arn
 
-  # Reference the S3 bucket and key where your zip is located
-  # Note: Bucket must be in the same region as Lambda (ap-southeast-2)
-  # Code updates are handled via Makefile/CLI, not Terraform
+  # Reference the S3 bucket and key where your zip is located.
+  # The ZIP is created by CI (Makefile) and stored in this bucket.
   s3_bucket = "zunou"
-  s3_key    = aws_s3_object.bootstrap_lambda.key
-
-  # Ignore changes to S3 key so CI deployments can update code
-  lifecycle {
-    ignore_changes = [s3_key]
-  }
+  s3_key    = var.scout_ai_proxy_s3_key
 
   environment {
     variables = {

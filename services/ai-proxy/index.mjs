@@ -256,6 +256,24 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC-TEST ENDPOINT - No authentication required (for testing only)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (path === '/public-test') {
+    metadata.statusCode = 200;
+    metadata.headers['Content-Type'] = 'application/json';
+    responseStream = awslambda.HttpResponseStream.from(responseStream, metadata);
+    responseStream.write(JSON.stringify({
+      message: 'Public test endpoint OK',
+      timestamp: new Date().toISOString(),
+      path: path,
+      method: event.requestContext?.http?.method || 'GET',
+      note: 'This endpoint is unauthenticated and for testing only.',
+    }));
+    responseStream.end();
+    return;
+  }
+
   if (path === '/test' || path === '/health') {
     metadata.statusCode = 200;
     metadata.headers['Content-Type'] = 'application/json';
