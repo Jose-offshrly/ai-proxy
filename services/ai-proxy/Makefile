@@ -31,6 +31,11 @@ deploy-stg:
 deploy-prod:
 	@$(MAKE) deploy ENV=prod
 
+# Show current AWS identity (useful for debugging)
+show-aws-identity:
+	@echo "🔍 Current AWS Identity:"
+	@aws sts get-caller-identity --output json 2>/dev/null | jq -r '"   User: " + .Arn + "\n   ID: " + .UserId' || echo "   (Could not get identity - check AWS credentials)"
+
 deploy: install zip upload update
 	@echo "✅ Deployment to $(ENV) complete!"
 
@@ -56,6 +61,7 @@ update: upload
 	@echo "🚀 Checking if Lambda function $(FUNCTION_NAME) exists..."
 	@echo "   Region: $${AWS_REGION:-not set}"
 	@echo "   Function name: $(FUNCTION_NAME)"
+	@echo "   AWS User: $$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null || echo 'unknown')"
 	@echo "   Listing all scout-ai-proxy functions in current region..."
 	@aws lambda list-functions --no-cli-pager --query 'Functions[?contains(FunctionName, `scout-ai-proxy`)].FunctionName' --output table 2>/dev/null | grep -v "FunctionName" | grep "scout-ai-proxy" || echo "   (Could not list functions - check AWS credentials)"
 	@ERROR_OUTPUT=$$(aws lambda get-function --no-cli-pager --function-name $(FUNCTION_NAME) --query 'Configuration.FunctionName' --output text 2>&1); \
@@ -74,6 +80,8 @@ update: upload
 			echo "   Error type: $$ERROR_TYPE"; \
 			echo "   The AWS credentials do not have permission to access Lambda functions."; \
 			echo "   Required permissions: lambda:GetFunction, lambda:UpdateFunctionCode, lambda:ListFunctions"; \
+			echo ""; \
+			echo "   AWS User: $$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null || echo 'unknown')"; \
 			echo ""; \
 			echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
 			echo "ℹ️  To fix:"; \
