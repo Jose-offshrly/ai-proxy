@@ -36,7 +36,7 @@ show-aws-identity:
 	@echo "🔍 Current AWS Identity:"
 	@aws sts get-caller-identity --output json 2>/dev/null | jq -r '"   User: " + .Arn + "\n   ID: " + .UserId' || echo "   (Could not get identity - check AWS credentials)"
 
-deploy: install zip upload update
+deploy: install zip upload update info
 	@echo "✅ Deployment to $(ENV) complete!"
 
 # Step 0: Install dependencies
@@ -56,42 +56,19 @@ upload: zip
 
 # Step 3: Update Lambda function code
 update: upload
-	@echo "🚀 Updating Lambda function code..."
-	@echo "   Region: $${AWS_REGION:-not set}"
-	@echo "   Function name: $(FUNCTION_NAME)"
-	@echo "   AWS User: $$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null || echo 'unknown')"
-	@UPDATE_OUTPUT=$$(aws lambda update-function-code --no-cli-pager \
+	@aws lambda update-function-code \
 	    --function-name $(FUNCTION_NAME) \
 	    --s3-bucket $(BUCKET_NAME) \
-	    --s3-key $(ZIP_FILE) \
-	    --query '[FunctionName, LastUpdateStatus, CodeSize, LastModified, Runtime, Handler]' \
-	    --output json 2>&1); \
-	UPDATE_EXIT=$$?; \
-	if [ $$UPDATE_EXIT -eq 0 ]; then \
-		echo "✅ Lambda function updated successfully!"; \
-		echo "   Status: $$(echo "$$UPDATE_OUTPUT" | jq -r '.[1]' 2>/dev/null || echo 'Updated')"; \
-		echo "   Code size: $$(echo "$$UPDATE_OUTPUT" | jq -r '.[2]' 2>/dev/null || echo 'N/A') bytes"; \
-		echo "   Runtime: $$(echo "$$UPDATE_OUTPUT" | jq -r '.[4]' 2>/dev/null || echo 'N/A')"; \
-		aws lambda get-function-url-config --function-name $(FUNCTION_NAME) --query 'FunctionUrl' --output text 2>/dev/null | xargs -I {} echo "   URL: {}" || echo ""; \
-	else \
-		ERROR_TYPE=$$(echo "$$UPDATE_OUTPUT" | grep -oE '(ResourceNotFoundException|AccessDeniedException|UnauthorizedOperation|InvalidParameterValueException|InvalidParameterValueException)' || echo "Unknown"); \
-		if echo "$$UPDATE_OUTPUT" | grep -qE '(AccessDenied|Unauthorized|denied|permission)'; then \
-			echo "❌ Permission denied: Cannot update Lambda function $(FUNCTION_NAME)"; \
-			echo "   Error type: $$ERROR_TYPE"; \
-			echo "   Required permissions: lambda:UpdateFunctionCode"; \
-		elif echo "$$UPDATE_OUTPUT" | grep -qE '(ResourceNotFound|not found)'; then \
-			echo "❌ Lambda function $(FUNCTION_NAME) does not exist."; \
-			echo "   Error type: $$ERROR_TYPE"; \
-			echo "   Run Terraform to create the Lambda function first."; \
-		else \
-			echo "❌ Failed to update Lambda function code"; \
-			echo "   Error type: $$ERROR_TYPE"; \
-			echo "   Error: $$(echo "$$UPDATE_OUTPUT" | sed -n 's/.*"message": "\([^"]*\)".*/\1/p' | head -1 || echo "$$UPDATE_OUTPUT" | head -1)"; \
-		fi; \
-		echo ""; \
-		echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
-		exit 1; \
-	fi
+	    --s3-key $(ZIP_FILE) || exit 1
+	@aws lambda wait function-updated \
+	    --function-name $(FUNCTION_NAME) || exit 1
+
+# Step 4: Get Lambda function info
+info: update
+	@aws lambda get-function-configuration \
+	    --function-name $(FUNCTION_NAME) \
+	    --query '[State, LastUpdateStatus, Runtime, Handler]' \
+	    --output json
 
 # Clean up the ZIP file
 clean:
