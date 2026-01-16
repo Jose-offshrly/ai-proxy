@@ -73,6 +73,7 @@ update: upload
 		    --s3-bucket $(BUCKET_NAME) \
 		    --s3-key $(ZIP_FILE) > /dev/null 2>&1; \
 		echo "✅ Lambda function updated successfully!"; \
+		aws lambda get-function-url-config --function-name $(FUNCTION_NAME) --query 'FunctionUrl' --output text 2>/dev/null | xargs echo || echo ""; \
 	else \
 		ERROR_TYPE=$$(echo "$$ERROR_OUTPUT" | grep -oE '(ResourceNotFoundException|AccessDeniedException|UnauthorizedOperation|InvalidParameterValueException)' || echo "Unknown"); \
 		if echo "$$ERROR_OUTPUT" | grep -qE '(AccessDenied|Unauthorized|denied|permission)'; then \
