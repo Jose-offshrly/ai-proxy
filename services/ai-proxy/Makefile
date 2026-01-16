@@ -36,11 +36,20 @@ show-aws-identity:
 	@echo "🔍 Current AWS Identity:"
 	@aws sts get-caller-identity --output json 2>/dev/null | jq -r '"   User: " + .Arn + "\n   ID: " + .UserId' || echo "   (Could not get identity - check AWS credentials)"
 
-deploy: install zip upload update info
+deploy: install zip upload update
 	@echo "✅ Deployment to $(ENV) complete!"
 
 # Step 0: Install dependencies
 install:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📋 Deployment Info:"
+	@echo "   ZIP File: $(ZIP_FILE)"
+	@echo "   S3 Bucket: $(BUCKET_NAME)"
+	@echo "   S3 Region: $$(aws s3api get-bucket-location --bucket $(BUCKET_NAME) --output text 2>/dev/null || echo 'unknown')"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "👤 AWS Identity:"
+	@aws sts get-caller-identity --output json 2>/dev/null | jq -r '"   User: " + .Arn + "\n   User ID: " + .UserId' || echo "   (Could not get identity - check AWS credentials)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📦 Installing dependencies..."
 	npm install --omit=dev
 
@@ -48,6 +57,13 @@ install:
 zip: install
 	@echo "📦 Zipping Lambda function..."
 	zip -r $(ZIP_FILE) *.mjs package.json node_modules/
+	@echo "🔍 Verifying zip contents..."
+	@if ! unzip -l $(ZIP_FILE) | grep -q "node_modules/"; then \
+	    echo "❌ node_modules not found in zip! Deployment aborted."; \
+	    exit 1; \
+	else \
+	    echo "✅ node_modules included in zip"; \
+	fi
 
 # Step 2: Upload to S3
 upload: zip
@@ -56,19 +72,18 @@ upload: zip
 
 # Step 3: Update Lambda function code
 update: upload
+	@echo "🔍 Verifying S3 file exists..."
+	@aws s3 ls s3://$(BUCKET_NAME)/$(ZIP_FILE) >/dev/null 2>&1 || (echo "❌ Error: $(ZIP_FILE) not found in s3://$(BUCKET_NAME)/" && exit 1)
+	@echo "✅ S3 file verified"
+	@echo "⚡ Updating Lambda function code..."
 	@aws lambda update-function-code \
 	    --function-name $(FUNCTION_NAME) \
 	    --s3-bucket $(BUCKET_NAME) \
 	    --s3-key $(ZIP_FILE) || exit 1
+	@echo "⏳ Waiting for Lambda update to complete..."
 	@aws lambda wait function-updated \
 	    --function-name $(FUNCTION_NAME) || exit 1
-
-# Step 4: Get Lambda function info
-info: update
-	@aws lambda get-function-configuration \
-	    --function-name $(FUNCTION_NAME) \
-	    --query '[State, LastUpdateStatus, Runtime, Handler]' \
-	    --output json
+	@echo "✅ Lambda code updated successfully"
 
 # Clean up the ZIP file
 clean:
