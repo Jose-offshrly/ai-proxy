@@ -79,11 +79,16 @@ update: upload
 	@aws lambda update-function-code \
 	    --function-name $(FUNCTION_NAME) \
 	    --s3-bucket $(BUCKET_NAME) \
-	    --s3-key $(ZIP_FILE) || exit 1
+	    --s3-key $(ZIP_FILE) >/dev/null 2>&1 || exit 1
 	@echo "⏳ Waiting for Lambda update to complete..."
 	@aws lambda wait function-updated \
 	    --function-name $(FUNCTION_NAME) || exit 1
 	@echo "✅ Lambda code updated successfully"
+	@echo "📋 Function Configuration:"
+	@aws lambda get-function-configuration \
+	    --function-name $(FUNCTION_NAME) \
+	    --query '{FunctionName:FunctionName, Runtime:Runtime, PackageType:PackageType, Handler:Handler, CodeSize:CodeSize, MemorySize:MemorySize, Timeout:Timeout, State:State, LastUpdateStatus:LastUpdateStatus, LastUpdateStatusReason:LastUpdateStatusReason, Version:Version, LastModified:LastModified}' \
+	    --output json
 
 # Clean up the ZIP file
 clean:
