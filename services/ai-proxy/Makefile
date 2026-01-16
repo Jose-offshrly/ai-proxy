@@ -41,6 +41,15 @@ deploy: install zip upload update
 
 # Step 0: Install dependencies
 install:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📋 Deployment Info:"
+	@echo "   ZIP File: $(ZIP_FILE)"
+	@echo "   S3 Bucket: $(BUCKET_NAME)"
+	@echo "   S3 Region: $$(aws s3api get-bucket-location --bucket $(BUCKET_NAME) --output text 2>/dev/null || echo 'unknown')"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "👤 AWS Identity:"
+	@aws sts get-caller-identity --output json 2>/dev/null | jq -r '"   User: " + .Arn + "\n   User ID: " + .UserId' || echo "   (Could not get identity - check AWS credentials)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📦 Installing dependencies..."
 	npm install --omit=dev
 
@@ -63,6 +72,9 @@ upload: zip
 
 # Step 3: Update Lambda function code
 update: upload
+	@echo "🔍 Verifying S3 file exists..."
+	@aws s3 ls s3://$(BUCKET_NAME)/$(ZIP_FILE) >/dev/null 2>&1 || (echo "❌ Error: $(ZIP_FILE) not found in s3://$(BUCKET_NAME)/" && exit 1)
+	@echo "✅ S3 file verified"
 	@echo "⚡ Updating Lambda function code..."
 	@aws lambda update-function-code \
 	    --function-name $(FUNCTION_NAME) \
