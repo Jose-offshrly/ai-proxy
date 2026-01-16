@@ -57,25 +57,49 @@ update: upload
 	@echo "   Region: $${AWS_REGION:-not set}"
 	@echo "   Function name: $(FUNCTION_NAME)"
 	@echo "   Listing all scout-ai-proxy functions in current region..."
-	@aws lambda list-functions --query 'Functions[?contains(FunctionName, `scout-ai-proxy`)].FunctionName' --output table 2>/dev/null || echo "   (Could not list functions - check AWS credentials)"
-	@ERROR_OUTPUT=$$(aws lambda get-function --function-name $(FUNCTION_NAME) 2>&1); \
+	@aws lambda list-functions --no-cli-pager --query 'Functions[?contains(FunctionName, `scout-ai-proxy`)].FunctionName' --output table 2>/dev/null | grep -v "FunctionName" | grep "scout-ai-proxy" || echo "   (Could not list functions - check AWS credentials)"
+	@ERROR_OUTPUT=$$(aws lambda get-function --no-cli-pager --function-name $(FUNCTION_NAME) --query 'Configuration.FunctionName' --output text 2>&1); \
 	EXIT_CODE=$$?; \
-	if [ $$EXIT_CODE -eq 0 ]; then \
+	if [ $$EXIT_CODE -eq 0 ] && [ -n "$$ERROR_OUTPUT" ] && [ "$$ERROR_OUTPUT" != "None" ]; then \
 		echo "✅ Lambda function exists, updating code..."; \
-		aws lambda update-function-code \
+		aws lambda update-function-code --no-cli-pager \
 		    --function-name $(FUNCTION_NAME) \
 		    --s3-bucket $(BUCKET_NAME) \
-		    --s3-key $(ZIP_FILE); \
+		    --s3-key $(ZIP_FILE) > /dev/null 2>&1; \
 		echo "✅ Lambda function updated successfully!"; \
 	else \
-		echo "⚠️  Lambda function $(FUNCTION_NAME) not found or error occurred."; \
-		echo "   Error: $$ERROR_OUTPUT"; \
-		echo ""; \
-		echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
-		echo "ℹ️  Troubleshooting:"; \
-		echo "   - Check if function name matches one of the functions listed above"; \
-		echo "   - Verify AWS_REGION environment variable is set correctly"; \
-		echo "   - Verify AWS credentials have lambda:GetFunction permission"; \
+		ERROR_TYPE=$$(echo "$$ERROR_OUTPUT" | grep -oE '(ResourceNotFoundException|AccessDeniedException|UnauthorizedOperation|InvalidParameterValueException)' || echo "Unknown"); \
+		if echo "$$ERROR_OUTPUT" | grep -qE '(AccessDenied|Unauthorized|denied|permission)'; then \
+			echo "⚠️  Permission denied: Cannot access Lambda function $(FUNCTION_NAME)"; \
+			echo "   Error type: $$ERROR_TYPE"; \
+			echo "   The AWS credentials do not have permission to access Lambda functions."; \
+			echo "   Required permissions: lambda:GetFunction, lambda:UpdateFunctionCode, lambda:ListFunctions"; \
+			echo ""; \
+			echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
+			echo "ℹ️  To fix:"; \
+			echo "   - Verify AWS credentials have lambda:GetFunction permission"; \
+			echo "   - Verify AWS credentials have lambda:UpdateFunctionCode permission"; \
+			echo "   - Check IAM policy attached to the credentials"; \
+		elif echo "$$ERROR_OUTPUT" | grep -qE '(ResourceNotFound|not found)'; then \
+			echo "⚠️  Lambda function $(FUNCTION_NAME) does not exist."; \
+			echo "   Error type: $$ERROR_TYPE"; \
+			echo ""; \
+			echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
+			echo "ℹ️  To fix:"; \
+			echo "   - Check if function name matches one of the functions listed above"; \
+			echo "   - Verify AWS_REGION environment variable is set correctly"; \
+			echo "   - Run Terraform to create the Lambda function"; \
+		else \
+			echo "⚠️  Lambda function $(FUNCTION_NAME) - error occurred."; \
+			echo "   Error type: $$ERROR_TYPE"; \
+			echo "   Error message: $$(echo "$$ERROR_OUTPUT" | sed -n 's/.*"message": "\([^"]*\)".*/\1/p' | head -1 || echo "Check AWS credentials and permissions")"; \
+			echo ""; \
+			echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
+			echo "ℹ️  Troubleshooting:"; \
+			echo "   - Check if function name matches one of the functions listed above"; \
+			echo "   - Verify AWS_REGION environment variable is set correctly"; \
+			echo "   - Verify AWS credentials have lambda:GetFunction permission"; \
+		fi; \
 		exit 0; \
 	fi
 
