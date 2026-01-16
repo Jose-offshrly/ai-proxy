@@ -54,7 +54,13 @@ upload: zip
 # In that case, the S3 file is already uploaded, so Terraform can create Lambda with it
 update: upload
 	@echo "🚀 Checking if Lambda function $(FUNCTION_NAME) exists..."
-	@if aws lambda get-function --function-name $(FUNCTION_NAME) > /dev/null 2>&1; then \
+	@echo "   Region: $${AWS_REGION:-not set}"
+	@echo "   Function name: $(FUNCTION_NAME)"
+	@echo "   Listing all scout-ai-proxy functions in current region..."
+	@aws lambda list-functions --query 'Functions[?contains(FunctionName, `scout-ai-proxy`)].FunctionName' --output table 2>/dev/null || echo "   (Could not list functions - check AWS credentials)"
+	@ERROR_OUTPUT=$$(aws lambda get-function --function-name $(FUNCTION_NAME) 2>&1); \
+	EXIT_CODE=$$?; \
+	if [ $$EXIT_CODE -eq 0 ]; then \
 		echo "✅ Lambda function exists, updating code..."; \
 		aws lambda update-function-code \
 		    --function-name $(FUNCTION_NAME) \
@@ -62,10 +68,14 @@ update: upload
 		    --s3-key $(ZIP_FILE); \
 		echo "✅ Lambda function updated successfully!"; \
 	else \
-		echo "⚠️  Lambda function $(FUNCTION_NAME) does not exist yet."; \
+		echo "⚠️  Lambda function $(FUNCTION_NAME) not found or error occurred."; \
+		echo "   Error: $$ERROR_OUTPUT"; \
+		echo ""; \
 		echo "✅ Code has been uploaded to S3: s3://$(BUCKET_NAME)/$(ZIP_FILE)"; \
-		echo "ℹ️  Run Terraform to create the Lambda function (it will use the S3 file that's already there)."; \
-		echo "ℹ️  After Terraform creates the function, subsequent deployments will update it automatically."; \
+		echo "ℹ️  Troubleshooting:"; \
+		echo "   - Check if function name matches one of the functions listed above"; \
+		echo "   - Verify AWS_REGION environment variable is set correctly"; \
+		echo "   - Verify AWS credentials have lambda:GetFunction permission"; \
 		exit 0; \
 	fi
 
